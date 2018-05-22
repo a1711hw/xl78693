@@ -327,7 +327,7 @@ plugins:
     webgui:
         use: true
         host: '0.0.0.0'
-        port: '${port}'
+        port: '80'
         site: 'http://${ipaddr}'
         #cdn: 'http://xxx.xxx.com'
         #icon: 'icon.png'
@@ -420,7 +420,9 @@ add_firewalld(){
     local firewall_file=/etc/firewalld/zones/public.xml
     if systemctl status firewalld |grep -q 'active (running)'; then
         firewall-cmd --zone=public --add-service=ssmgr --permanent
-        grep -q '"http"' ${firewall_file} || firewall-cmd --zone=public --add-service=http --permanent
+        if ! grep -q '"http"' ${firewall_file} ;then
+            firewall-cmd --zone=public --add-service=http --permanent
+        fi
         firewalld-cmd --reload
         if ! grep -q '"ssmgr"' ${firewall_file}; then
             sed -i '/dhcpv6-client/a\  <service name="ssmgr"/>' ${firewall_file}
