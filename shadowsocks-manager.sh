@@ -7,10 +7,10 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
 
 if [ $(id -u) != "0" ];then
-    echo "Error: This script must be run as root!"
+    echo "[${red}Error!${plain}] This script must be run as root!"
     exit 1
 elif [ `cat /etc/redhat-release |awk -F '.' '{print $1}'|awk '{print $NF}'` -ne 7 ];then
-    echo "You have to run script on CentOS 7"
+    echo "[${red}Error!${plain}] You have to run script on CentOS 7"
     exit 1
 fi
 
@@ -36,7 +36,6 @@ print_info(){
 |                                                                           |
 +---------------------------------------------------------------------------+
 EOF
-    blank_line
 }
 
 cur_dir=`pwd`
@@ -87,7 +86,7 @@ disable_selinux(){
 
 get_ss_version(){
     ver=$(wget --no-check-certificate -qO- https://api.github.com/repos/shadowsocks/shadowsocks-libev/releases/latest | grep 'tag_name' | cut -d\" -f4)
-    [ -z ${ver} ] && echo "Error: Get shadowsocks-libev latest version failed" && exit 1
+    [ -z ${ver} ] && echo -e "[${red}Error!${plain}] Get shadowsocks-libev latest version failed" && exit 1
     shadowsocks_libev_ver="shadowsocks-libev-$(echo ${ver} | sed -e 's/^[a-zA-Z]//g')"
     download_link="https://github.com/shadowsocks/shadowsocks-libev/releases/download/${ver}/${shadowsocks_libev_ver}.tar.gz"
 }
@@ -106,16 +105,20 @@ install_deppak(){
     echo
     echo "The relevant base package is being installed." 
     echo
-    sleep 3
+    sleep 1
     for dep in epel-release wget tar unzip openssl openssl-devel gettext gcc autoconf libtool automake make asciidoc xmlto libev-devel pcre pcre-devel git c-ares-devel
     do
-        if ! rpm -qa|grep -q '^${dep}'
+        if ! rpm -qa |grep -q "^${dep}"
         then
             yum install -y ${dep}
-            [ $? -ne 0 ] && echo -e "${red}Error!${plain} The install ${dep} failed." && exit 1
+            if [ $? -ne 0 ] ;then
+                echo
+                echo -e "[${red}Error!${plain}] The install ${dep} failed."
+                exit 1
+            fi
         else
             echo
-            echo -e "${yellow}Warning!${plain} ${dep} already installed."
+            echo -e "[${yellow}Warning!${plain}] ${dep} already installed."
         fi
     done
 }
@@ -125,20 +128,31 @@ set_conf(){
     sleep 1
     echo
     echo "Now start set up some related configuration."
-    echo
-    echo "Please enter port for shadowsocks-libev:"
-    read -p "(Default prot: 4000):" ss_libev_port
-    [ -z "${ss_libev_port}" ] && ss_libev_port="4000"
-
+    while :
+    do
+        echo
+        echo "Please enter port for shadowsocks-libev:"
+        read -p "(Default prot: 4000):" ss_libev_port
+        [ -z "${ss_libev_port}" ] && ss_libev_port="4000"
+        if ! echo ${ss_libev_port} |grep -q '^[0-9]\+$'; then
+            echo
+            echo -e "[${red}Error!${plain}] You are not enter numbers.,please try again."
+        else
+            break
+        fi
+    done
     # set port for shadowsocks-manager
     while :;do
         echo
         echo "Please enter port for shadowsocks-manager:"
         read -p "(Default prot: 4001):" ssmgr_port
         [ -z "${ssmgr_port}" ] && ssmgr_port="4001"
-        if [ ${ssmgr_port} -eq ${ss_libev_port} ];then
+        if ! echo ${ssmgr_port} |grep -q '^[0-9]\+$'; then
             echo
-            echo -e "${red}Error!${plain} This port is already in use,please try again."
+            echo -e "[${red}Error!${plain}] You are not enter numbers.,please try again."
+        elif [ ${ssmgr_port} -eq ${ss_libev_port} ];then
+            echo
+            echo -e "[${red}Error!${plain}] This port is already in use,please try again."
         else
             break
         fi
@@ -151,15 +165,20 @@ set_conf(){
     while :; do
         echo
         echo "Please enter the port ranges use for user:"
-        read -p "(For example: 50000-60000):" port_ranges
+        read -p "(Default prot: 50000-60000):" port_ranges
         [ -z "${port_ranges}" ] && port_ranges=50000-60000
+        if ! echo ${port_ranges} |grep -q '^[0-9]\+\-[0-9]\+$'; then
+            echo
+            echo -e "[${red}Error!${plain}] You are not enter numbers.,please try again."
+            continue
+        fi
         start_port=`echo $port_ranges |awk -F '-' '{print $1}'`
         end_port=`echo $port_ranges |awk -F '-' '{print $2}'`
         if [ ${start_port} -ge 1 ] && [ ${end_port} -le 65535 ] ; then
             break
         else
             echo
-            echo -e "${red}Error!${plain} Please enter a correct number [1-65535]"
+            echo -e "[${red}Error!${plain}] Please enter a correct number [1-65535]"
         fi
     done
 
@@ -177,12 +196,12 @@ set_conf(){
         expr ${pick} + 1 &>/dev/null
         if [ $? -ne 0 ]; then
             echo
-            echo -e "${red}Error!${plain} Please enter a number."
+            echo -e "[${red}Error!${plain}] Please enter a number."
             continue
         fi
         if [[ "$pick" -lt 1 || "$pick" -gt ${#encryptions[@]} ]]; then
             echo
-            echo -e "${red}Error!${plain} Please enter a number between 1 and ${#encryptions[@]}"
+            echo -e "[${red}Error!${plain}] Please enter a number between 1 and ${#encryptions[@]}"
             continue
         fi
         ss_libev_encry=${encryptions[$pick-1]}
@@ -198,11 +217,11 @@ set_conf(){
         read -p "(For example: 123@123.com):" email_admin
         if [ -z ${email_admin} ];then
             echo
-            echo -e "${red}Error${plain}: Administrator Email address can not be empty!"
+            echo -e "[${red}Error!${plain}] Administrator Email address can not be empty!"
             continue
         elif check_email ${email_admin};then
             echo
-            echo -e "${red}Error${plain}: Please enter a correct email address!"
+            echo -e "[${red}Error!${plain}] Please enter a correct email address!"
         else
             break
         fi
@@ -251,7 +270,7 @@ EOF
     # shadowsocks-manager configuration
     if [ ! -d /root/.ssmgr ];then
         mkdir /root/.ssmgr/
-        [ -s /root/.ssmgr/ss.yml ] || cat > /root/.ssmgr/ss.yml <<EOF
+        cat > /root/.ssmgr/ss.yml <<EOF
 type: s
 empty: false
 shadowsocks:
@@ -262,7 +281,7 @@ manager:
 db: 'ss.sqlite'
 
 EOF
-        [ -s /root/.ssmgr/webgui.yml ] || cat > /root/.ssmgr/webgui.yml <<EOF
+        cat > /root/.ssmgr/webgui.yml<<EOF
 type: m
 empty: false
 manager:
@@ -308,8 +327,12 @@ plugins:
     webgui:
         use: true
         host: '0.0.0.0'
-        port: '80'
+        port: '${port}'
         site: 'http://${ipaddr}'
+        #cdn: 'http://xxx.xxx.com'
+        #icon: 'icon.png'
+        #skin: 'default'
+        #googleAnalytics: 'UA-xxxxxxxx-x'
         #gcmSenderId: '456102641793'
         #gcmAPIKey: 'AAAAGzzdqrE:XXXXXXXXXXXXXX'
     webgui_autoban:
@@ -354,11 +377,8 @@ check_conf(){
     while :; do
         set_conf
         clear
-        echo "+---------------------------------------------------------------+"
         echo
-        echo -e "      ${green}Please verify the configure you have entered.${plain}" 
-        echo
-        echo "+---------------------------------------------------------------+"
+        echo -e "[${green}Info${plain}] Please verify the configure you have entered."
         conf_info
         read -p "Are you sure to use them?(y/n):" verify
         if [ "${verify}" == "y" ] || [ "${verify}" == "Y" ];then
@@ -371,15 +391,18 @@ download() {
     local filename=${1}
     local cur_dir=`pwd`
     if [ -s ${filename} ]; then
-        echo -e "${filename} [found]"
+        echo
+        echo -e "[${green}Info!${plain}] ${filename} [found]"
     else
-        echo -e "${filename} not found, download now..."
+        echo
+        echo -e "[${yellow}Warning!${plain}] ${filename} not found, download now..."
         wget --no-check-certificate -c -O ${1} ${2}
         if [ $? -eq 0 ]; then
-            echo -e "${filename} download completed..."
+            echo
+            echo -e "[${green}Info!${plain}] ${filename} download completed..."
         else
             echo
-            echo -e "${red}Failed to download ${filename}${plain}, please download it to ${cur_dir} directory manually and try again."
+            echo -e "[${red}Error!${plain}] Failed to download ${filename}, please download it to ${cur_dir} directory manually and try again."
             exit 1
         fi
     fi
@@ -391,7 +414,6 @@ download_files(){
     download "${shadowsocks_libev_ver}.tar.gz" "${download_link}"
     download "${libsodium_file}.tar.gz" "${libsodium_url}"
     download "${mbedtls_file}-gpl.tgz" "${mbedtls_url}"
-    download "${nodejs_file}.tar.gz" "${nodejs_url}"
 }
 
 add_firewalld(){
@@ -406,13 +428,13 @@ add_firewalld(){
         fi
     else
         echo
-        echo -e "${yellow}Warning!${plain} The firewalld not running."
+        echo -e "[${yellow}Warning!${plain}] The firewalld not running."
     fi
 }
 
 install_libsodium(){
     echo
-    echo "Installing ${libsodium_file}"
+    echo -e "[${green}Info!${plain}] Installing ${libsodium_file}"
     sleep 3
     if [ ! -f /usr/lib/libsodium.a ]; then
         cd ${cur_dir}
@@ -421,18 +443,18 @@ install_libsodium(){
         ./configure --prefix=/usr && make && make install
         if [ $? -ne 0 ]; then
             echo
-            echo -e "${libsodium_file} install failed."
+            echo -e "[${red}Error!${plain}] ${libsodium_file} install failed."
             exit 1
         fi
     else
         echo
-        echo -e "${yellow}Warning!${plain} ${libsodium_file} already installed."
+        echo -e "[${yellow}Warning!${plain}] ${libsodium_file} already installed."
     fi
 }
 
 install_mbedtls(){
     echo
-    echo "Installing ${mbedtls_file}"
+    echo -e "[${green}Info!${plain}] Installing ${mbedtls_file}"
     sleep 3
     if [ ! -f /usr/lib/libmbedtls.a ]; then
         cd ${cur_dir}
@@ -442,56 +464,47 @@ install_mbedtls(){
         make DESTDIR=/usr install
         if [ $? -ne 0 ]; then
             echo
-            echo -e "${red}Error!${plain} The ${mbedtls_file} install failed."
+            echo -e "[${red}Error!${plain}] The ${mbedtls_file} install failed."
             exit 1
         fi
     else
         echo
-        echo -e "${yellow}Warning!${plain} ${mbedtls_file} already installed."
+        echo -e "[${yellow}Warning!${plain}] ${mbedtls_file} already installed."
     fi
 }
 
 install_nodejs(){
     echo
-    echo "Installing ${nodejs_file}"
+    echo -e "[${green}Info!${plain}] Installing ${nodejs_file}"
     sleep 3
-    if [ ! -f /usr/local/node ];then
-        cd ${cur_dir}
-        tar zxf ${nodejs_file}.tar.gz
-        mv ${nodejs_file} /usr/local/node
-        cat >/etc/profile.d/node.sh<<EOF
-export NODE_HOME=/usr/local/node
-export PATH=$PATH:$NODE_HOME/bin
-export NODE_PATH=$NODE_HOME/lib/node_modules
-EOF
-        source /etc/profile.d/node.sh
-        rm -rf ${nodejs_file}.tar.gz
+    if ! rpm -qa |grep -q nodejs ;then
+        curl -sL https://rpm.nodesource.com/setup_6.x | bash -
+        yum install -y nodejs
     else
         echo
-        echo -e "${yellow}Warning!${plain} The /usr/local/node already exists."
+        echo -e "[${yellow}Warning!${plain}] The nodejs already exists."
     fi
 }
 
 ssmgr_start(){
     echo
-    read -p "Do you decide to start them now?(y/n)" decide
-    echo
-    if [ "${decide}" == "y" ] || [ "${decide}" == "Y" ];then
-        pm2 --name "ss-manager" -f start ss-manager -x -- -m ${ss_libev_encry} --manager-address 127.0.0.1:${ss_libev_port}
-        pm2 --name "ss.yml" -f start ssmgr -x -- -c ss.yml
-        pm2 --name "webgui.yml" -f start ssmgr -x -- -c webgui.yml
+    echo -e "[${green}Info!${plain}] Starting ssmgr..."
+    if netstat -lnpt|grep ':80 ' |grep -v 'grep' >/dev/null
+    then
+        echo
+        echo -e "[${red}Error!${plain}] The port 80 is already used by other programs,please modify it manually."
+        break
     fi
-    echo
-    echo -e "${green}Thanks for using this script.${plain}"
-    blank_line
-    sleep 3
+    ss-manager -m ${ss_libev_encry} --manager-address 127.0.0.1:${ss_libev_port}
+    screen -dmS ss ssmgr -c ss.yml
+    screen -dmS webgui ssmgr -c webgui.yml
 }
 
 install_shadowsocks_libev(){
     install_libsodium
     install_mbedtls
     echo
-    echo "Installing ${shadowsocks_libev_ver}"
+    echo -e "[${green}Info!${plain}] Installing ${shadowsocks_libev_ver}"
     sleep 3
     cd ${cur_dir}
     tar zxf ${shadowsocks_libev_ver}.tar.gz
@@ -499,56 +512,52 @@ install_shadowsocks_libev(){
     ./configure --disable-documentation
     if [ $? -ne 0 ];then
         echo
-        echo -e "${red}Error!${plain} ${shadowsocks_libev_ver} install failed."
+        echo -e "[${red}Error!${plain}] ${shadowsocks_libev_ver} install failed."
         exit 1
     else
         make && make install
         if  [ $? -ne 0 ];then
             echo
-            echo -e "${red}Error!${plain} ${shadowsocks_libev_ver} install failed."
+            echo -e "[${red}Error!${plain}] ${shadowsocks_libev_ver} install failed."
             exit 1
         fi
     fi
     echo
-    echo -e "${green}${shadowsocks_libev_ver} install success.${plain}"
+    echo -e "[${green}Info!${plain}] ${shadowsocks_libev_ver} install success."
 }
 
 install_shadowsocks_manager(){
     echo
-    echo "Installing shadowsocks-manager..."
+    echo -e "[${green}Info!${plain}] Installing shadowsocks-manager..."
     sleep 3
     npm i -g shadowsocks-manager
     if [ $? -eq 0 ];then
-        echo "+---------------------------------------------------------------+"
         echo
-        echo -e "      $[green]The shdowsocks-manager install success!${plain}"
-        echo
-        echo "+---------------------------------------------------------------+"
+        echo -e "[${green}Info!${plain}] The shdowsocks-manager install success!"
     else
         echo
-        echo -e "${red}Error!${plain} The shdowsocks-manager install failed!"
+        echo -e "[${red}Error!${plain}] The shdowsocks-manager install failed!"
         exit 1
     fi
-
-    cd ${cur_dir}
-    rm -rf ${libsodium_file} ${libsodium_file}.tar.gz
-    rm -rf ${mbedtls_file} ${mbedtls_file}-gpl.tgz
-    rm -rf ${shadowsocks_libev_ver} ${shadowsocks_libev_ver}.tar.gz
-    conf_info
+    
 }
 
 install_all_programs(){
     print_info
     disable_selinux
     check_conf
+    add_firewalld
     install_deppak
     download_files
     install_nodejs
     install_shadowsocks_libev
-    npm i -g pm2
-    add_firewalld
     install_shadowsocks_manager
     ssmgr_start
+    print_info
+    conf_info
+    echo -e "[${green}Info!${plain}] Thanks for your using this script."
+    echo -e "[${green}Info!${plain}] Please visit ${ipaddr}"
+    sleep 3
 }
 
 uninstall_shadowsocks_libev(){
@@ -573,30 +582,29 @@ uninstall_shadowsocks_libev(){
 
 uninstall_shadowsocks_manager(){
     npm uninstall -g shadowsocks-manager
+    blank_line
     read -p "Do you keep the configuration file?(y/n)" keep_path
     if [ "${keep_path}" == "n" ] || [ "${keep_path}" == "N" ];then
-        rm -rf /usr/local/node
-        rm -rf /etc/profile.d/node.sh
+        rm -rf /usr/lib/node_modules/shadowsocks-manager
         rm -rf /root/.ssmgr
         firewall-cmd --zone=public --remove-service=ssmgr --permanent
         rm -rf /etc/firewalld/services/ssmgr.xml
         firewall-cmd --reload
     fi
-    print_info
-    echo -e "${green}Thanks for using this script.${plain}"
-    blank_line
 }
 uninstall_all_programs(){
     print_info
-    printf "Are you sure uninstall_all_programs? (y/n)"
-    printf "\n"
-    read -p "(Default: n):" answer
+    blank_line
+    read -p "Are you sure uninstall_all_programs?(y/n):" answer
     [ -z ${answer} ] && answer="n"
     if [ "${answer}" == "y" ] || [ "${answer}" == "Y" ]; then
-        pm2 delete all
         uninstall_shadowsocks_libev
         uninstall_shadowsocks_manager
     fi
+    print_info
+    echo
+    echo -e "[${green}Info!${plain}] Thanks for using this script."
+    blank_line
 }
 
 action=${1}
@@ -606,7 +614,7 @@ case ${action} in
         ${action}_all_programs
         ;;
     *)
-        echo -e "${red}Error!${plain} Please enter: `${0}` install or uninstall."
+        echo -e "[${red}Error!${plain}] Please enter: ${0} install or uninstall."
         ;;
 esac
 
