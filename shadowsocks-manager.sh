@@ -112,7 +112,7 @@ install_deppak(){
         if ! rpm -qa|grep -q '^${dep}'
         then
             yum install -y ${dep}
-            [ $? -eq 0 ] && echo -e "${red}Error!${plain} The install ${dep} failed." && exit 1
+            [ $? -ne 0 ] && echo -e "${red}Error!${plain} The install ${dep} failed." && exit 1
         else
             echo
             echo -e "${yellow}Warning!${plain} ${dep} already installed."
@@ -125,18 +125,10 @@ set_conf(){
     sleep 1
     echo
     echo "Now start set up some related configuration."
-    while :;do
-        echo
-        echo "Please enter port for shadowsocks-libev:"
-        read -p "(Default prot: 4000):" ss_libev_port
-        [ -z "${ss_libev_port}" ] && ss_libev_port="4000"
-        if grep '[0-9]' ${ss_libev_port};then
-            break
-        else
-            echo
-            echo -e "${red}Error!${plain} You don't enter a number,please try again."
-        fi
-    done
+    echo
+    echo "Please enter port for shadowsocks-libev:"
+    read -p "(Default prot: 4000):" ss_libev_port
+    [ -z "${ss_libev_port}" ] && ss_libev_port="4000"
 
     # set port for shadowsocks-manager
     while :;do
@@ -467,10 +459,12 @@ install_nodejs(){
         cd ${cur_dir}
         tar zxf ${nodejs_file}.tar.gz
         mv ${nodejs_file} /usr/local/node
-        echo "export NODE_HOME=/usr/local/node" >> /etc/profile
-        echo "export PATH=$PATH:$NODE_HOME/bin" >> /etc/profile
-        echo "export NODE_PATH=/usr/local/node/lib/node_modules" >> /etc/profile
-        source /etc/profile
+        cat >/etc/profile.d/node.sh<<EOF
+export NODE_HOME=/usr/local/node
+export PATH=$PATH:$NODE_HOME/bin
+export NODE_PATH=$NODE_HOME/lib/node_modules
+EOF
+        source /etc/profile.d/node.sh
         rm -rf ${nodejs_file}.tar.gz
     else
         echo
@@ -582,10 +576,7 @@ uninstall_shadowsocks_manager(){
     read -p "Do you keep the configuration file?(y/n)" keep_path
     if [ "${keep_path}" == "n" ] || [ "${keep_path}" == "N" ];then
         rm -rf /usr/local/node
-        sed -i "s#export NODE_HOME=/usr/local/node##g" /etc/profile
-        sed -i "s#export PATH=$PATH:$NODE_HOME/bin##g" /etc/profile
-        sed -i "s#export NODE_PATH=/usr/local/node/lib/node_modules##g" /etc/profile
-        source /etc/profile
+        rm -rf /etc/profile.d/node.sh
         rm -rf /root/.ssmgr
         firewall-cmd --zone=public --remove-service=ssmgr --permanent
         rm -rf /etc/firewalld/services/ssmgr.xml
