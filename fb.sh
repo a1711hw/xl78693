@@ -12,15 +12,15 @@ ip_list=`grep "${time}" "${log}" |grep 'Failed password' |egrep -o '[0-9]{1,3}\.
 
 main(){
     if [ ! -s ${file} ];then
-        firewall-cmd --permanent --zone=drop --new-ipset=${filename} --type=hash:ip
-        firewall-cmd --permanent --zone=drop --add-rich-rule="rule source ipset=${filename} drop"
+        firewall-cmd --permanent --zone=public --new-ipset=${filename} --type=hash:ip
+        firewall-cmd --permanent --zone=public --add-rich-rule="rule source ipset=${filename} port port=22 protocol=tcp drop"
     fi
 
     for i in `echo "${ip_list}"`
     do
         grep ${i} ${file} >/dev/null
         if [ $? -ne 0 ];then
-            firewall-cmd --permanent --zone=drop --ipset=${filename} --add-entry=${i}
+            firewall-cmd --permanent --zone=public --ipset=${filename} --add-entry=${i}
         fi
     done
     firewall-cmd --reload
