@@ -106,7 +106,7 @@ install_deppak(){
     echo "The relevant base package is being installed." 
     echo
     sleep 1
-    for dep in epel-release wget tar unzip openssl openssl-devel gettext gcc autoconf libtool automake make asciidoc xmlto libev-devel pcre pcre-devel git c-ares-devel
+    for dep in epel-release wget tar unzip openssl openssl-devel gettext gcc autoconf libtool automake make asciidoc xmlto libev-devel pcre pcre-devel git c-ares-devel screen
     do
         if ! rpm -qa |grep -q "^${dep}"
         then
@@ -548,6 +548,7 @@ install_all_programs(){
     print_info
     disable_selinux
     check_conf
+    add_conf
     add_firewalld
     install_deppak
     download_files
