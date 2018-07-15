@@ -1,7 +1,7 @@
 #! /bin/bash
 # This is shadowsocks-manager install script.
-# Create data: 2018-04-01
-# Version: 1.1.0
+# Update data: 2018-07-15
+# Version: 1.1.2
 
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
@@ -16,11 +16,6 @@ fi
 
 blank_line(){
     cat<<EOF
-
-
-
-
-
 EOF
 }
 
@@ -38,6 +33,17 @@ print_info(){
 EOF
 }
 
+print_error(){
+    echo 
+    echo
+    echo -e "[${red}Error!${plain}] Please enter: "
+    echo
+    echo -e "    ${red}${0} install all${plain}"
+    echo -e "    ${red}${0} install server${plain}"
+    echo -e "    ${red}${0} install node${plain}"
+    echo
+}
+
 cur_dir=`pwd`
 
 libsodium_file="libsodium-1.0.16"
@@ -46,8 +52,8 @@ libsodium_url="https://github.com/jedisct1/libsodium/releases/download/1.0.16/li
 mbedtls_file="mbedtls-2.6.0"
 mbedtls_url="https://tls.mbed.org/download/mbedtls-2.6.0-gpl.tgz"
 
-nodejs_file="node-v6.9.5-linux-x64"
-nodejs_url="https://nodejs.org/dist/v6.9.5/node-v6.9.5-linux-x64.tar.gz"
+nodejs_file="node-v8.11.3-linux-x64"
+nodejs_url="https://nodejs.org/dist/v8.11.3/node-v8.11.3-linux-x64.tar.gz"
 
 encryptions=(
 aes-256-gcm
@@ -106,7 +112,7 @@ install_deppak(){
     echo "The relevant base package is being installed." 
     echo
     sleep 1
-    for dep in epel-release wget tar unzip openssl openssl-devel gettext gcc autoconf libtool automake make asciidoc xmlto libev-devel pcre pcre-devel git c-ares-devel screen
+    for dep in epel-release tar unzip openssl openssl-devel gettext gcc autoconf libtool automake make asciidoc xmlto libev-devel pcre pcre-devel git c-ares-devel screen net-tools
     do
         if ! rpm -qa |grep -q "^${dep}"
         then
@@ -123,11 +129,9 @@ install_deppak(){
     done
 }
 
-set_conf(){
+get_conf(){
     # set port for shadowsocks-libev
     sleep 1
-    echo
-    echo "Now start set up some related configuration."
     while :
     do
         echo
@@ -157,6 +161,7 @@ set_conf(){
             break
         fi
     done
+
     # set passwd for shadowsocks-manager
     echo
     read -p "Please enter passwd for shadowsocks-manager:" ssmgr_passwd
@@ -182,7 +187,7 @@ set_conf(){
         fi
     done
 
-        # choose encryption method for shadowsocks-libev
+    # choose encryption method for shadowsocks-libev
     while true
     do
         echo
@@ -210,31 +215,32 @@ set_conf(){
         break
     done
 
-    # get email info
-    while :; do
+    # set admin email
+    if [ "${program}" == "all" ] || [ "${program}" == "server" ];then
+        while :; do
+            echo
+            echo "Please enter email address for admin:"
+            read -p "(For example: 123@123.com):" email_admin
+            if [ -z ${email_admin} ];then
+                echo
+                echo -e "[${red}Error!${plain}] Administrator Email address can not be empty!"
+                continue
+            elif check_email ${email_admin};then
+                echo
+                echo -e "[${red}Error!${plain}] Please enter a correct email address!"
+            else
+                break
+            fi
+        done
         echo
-        echo "Please enter email address for admin:"
-        read -p "(For example: 123@123.com):" email_admin
-        if [ -z ${email_admin} ];then
-            echo
-            echo -e "[${red}Error!${plain}] Administrator Email address can not be empty!"
-            continue
-        elif check_email ${email_admin};then
-            echo
-            echo -e "[${red}Error!${plain}] Please enter a correct email address!"
-        else
-            break
-        fi
-    done
-    echo
-    read -p "Please enter your email passwd or authorization code:" email_passwd
-
-    echo
-    echo "Please enter your Mail Server address:" 
-    read -p "(For example: smtp.qq.com or other):" email_smtp
+        read -p "Please enter your email passwd or authorization code:" email_passwd
+        echo
+        echo "Please enter your Mail Server address:" 
+        read -p "(For example: smtp.qq.com or other):" email_smtp
+    fi
 }
 
-conf_info(){
+print_conf(){
     echo
     echo "+---------------------------------------------------------------+"
     echo
@@ -243,34 +249,18 @@ conf_info(){
     echo -e "        Your ss-mgr passwd         ${red}${ssmgr_passwd}${plain}"
     echo -e "        Your user port ranges:     ${red}${port_ranges}${plain}"
     echo -e "        Your ss-libev-encry:       ${red}${ss_libev_encry}${plain}"
-    echo -e "        Your E-amil address:       ${red}${email_admin}${plain}"
-    echo -e "        Your E-amil server:        ${red}${email_smtp}${plain}"
+    if [ "${program}" == "all" ] || [ "${program}" == "server" ];then
+        echo -e "        Your E-amil address:       ${red}${email_admin}${plain}"
+        echo -e "        Your E-amil server:        ${red}${email_smtp}${plain}"
+    fi
     echo
     echo "+---------------------------------------------------------------+"
     blank_line
 }
 
-add_conf(){
-    # Firewall configuration
-    if [ ! -s /etc/firewalld/services/ssmgr.xml ];then
-        cat > /etc/firewalld/services/ssmgr.xml <<EOF
-<?xml version="1.0" encoding="utf-8"?>
-<service>
-  <short>ssmgr</short>
-  <description>ssmgr service.</description>
-  <port protocol="tcp" port="${port_ranges}"/>
-  <port protocol="udp" port="${port_ranges}"/>
-  <port protocol="tcp" port="${ss_libev_port}"/>
-  <port protocol="udp" port="${ss_libev_port}"/>
-  <port protocol="tcp" port="${ssmgr_port}"/>
-  <port protocol="udp" port="${ssmgr_port}"/>
-</service>
-EOF
-    fi
+create_file_conf(){
     # shadowsocks-manager configuration
-    if [ ! -d /root/.ssmgr ];then
-        mkdir /root/.ssmgr/
-        cat > /root/.ssmgr/ss.yml <<EOF
+    cat > /root/.ssmgr/ss.yml <<EOF
 type: s
 empty: false
 shadowsocks:
@@ -279,15 +269,15 @@ manager:
     address: 0.0.0.0:${ssmgr_port}
     password: '${ssmgr-passwd}'
 db: 'ss.sqlite'
-
 EOF
+
+    if [ "${program}" == "all" ] || [ "${program}" == "server" ];then
         cat > /root/.ssmgr/webgui.yml<<EOF
 type: m
 empty: false
 manager:
     address: ${ipaddr}:${ssmgr_port}
     password: '${ssmgr-passwd}'
-
 plugins:
     flowSaver:
         use: true
@@ -349,7 +339,6 @@ plugins:
             time: '30m'
             flow: '0.5g'
             banTime: '10m'
-
     alipay:
         use: fslse
         appid: 
@@ -365,26 +354,56 @@ plugins:
 db: 'webgui.sqlite'
 EOF
     fi
+
+    # Firewall configuration
+    if [ ! -s /etc/firewalld/services/ssmgr.xml ];then
+        cat > /etc/firewalld/services/ssmgr.xml <<EOF
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+  <short>ssmgr</short>
+  <description>ssmgr service.</description>
+  <port protocol="tcp" port="${port_ranges}"/>
+  <port protocol="udp" port="${port_ranges}"/>
+  <port protocol="tcp" port="${ss_libev_port}"/>
+  <port protocol="udp" port="${ss_libev_port}"/>
+  <port protocol="tcp" port="${ssmgr_port}"/>
+  <port protocol="udp" port="${ssmgr_port}"/>
+</service>
+EOF
+    fi
 }
 
 check_conf(){
     # check configuration information
     blank_line
-    read -p "Do you need to configure some parameters here?(y/n)" config
-    if [ "${config}" == "n" ] || [ "${config}" == "N" ];then
-        return
-    fi
-    while :; do
-        set_conf
-        clear
-        echo
-        echo -e "[${green}Info${plain}] Please verify the configure you have entered."
-        conf_info
-        read -p "Are you sure to use them?(y/n):" verify
-        if [ "${verify}" == "y" ] || [ "${verify}" == "Y" ];then
-            break
+    if [ ! -d /root/.ssmgr ];then
+        mkdir /root/.ssmgr/
+        read -p "Do you need to configure some parameters here?(y/n)" config
+        if [ "${config}" == "n" ] || [ "${config}" == "N" ];then
+            return
         fi
-    done
+
+        echo
+        echo "Now start set up some related configuration."
+
+        while :; do
+            get_conf
+            clear
+        echo
+            echo -e "[${green}Info${plain}] Please verify the configure you have entered."
+            print_conf
+            read -p "Are you sure to use them?(y/n):" verify
+            if [ "${verify}" == "n" ] || [ "${verify}" == "N" ];then
+                continue
+            else
+                create_file_conf
+                break
+            fi
+        done
+    else
+        ss_libev_port=$(grep "add" .ssmgr/ss.yml |awk -F ':' '{print $NF}' |head -n1)
+        ss_libev_encry="aes-256-gcm"
+    fi
 }
 
 download() {
@@ -414,19 +433,22 @@ download_files(){
     download "${shadowsocks_libev_ver}.tar.gz" "${download_link}"
     download "${libsodium_file}.tar.gz" "${libsodium_url}"
     download "${mbedtls_file}-gpl.tgz" "${mbedtls_url}"
+    download "node-v8.11.3-linux-x64.tar.gz" "${nodejs_url}"
 }
 
-add_firewalld(){
+set_firewalld(){
     local firewall_file=/etc/firewalld/zones/public.xml
     if systemctl status firewalld |grep -q 'active (running)'; then
         firewall-cmd --zone=public --add-service=ssmgr --permanent
-        if ! grep -q '"http"' ${firewall_file} ;then
-            firewall-cmd --zone=public --add-service=http --permanent
+        if [ "${program}" == "all" ] || [ "${program}" == "server" ];then
+            if ! grep -q '"http"' ${firewall_file} ;then
+                firewall-cmd --zone=public --add-service=http --permanent
+            fi
+            firewall-cmd --reload
         fi
-        firewalld-cmd --reload
         if ! grep -q '"ssmgr"' ${firewall_file}; then
             sed -i '/dhcpv6-client/a\  <service name="ssmgr"/>' ${firewall_file}
-            firewalld-cmd --reload
+            firewall-cmd --reload
         fi
     else
         echo
@@ -479,27 +501,26 @@ install_nodejs(){
     echo
     echo -e "[${green}Info!${plain}] Installing ${nodejs_file}"
     sleep 3
-    if ! rpm -qa |grep -q nodejs ;then
-        curl -sL https://rpm.nodesource.com/setup_6.x | bash -
-        yum install -y nodejs
-    else
+    if rpm -qa |grep -q nodejs ;then
         echo
         echo -e "[${yellow}Warning!${plain}] The nodejs already exists."
+    else
+        cd ${cur_dir}
+        tar zxf ${nodejs_file}.tar.gz
+        mv ${nodejs_file} /usr/local/node
+        if [ ! -s /usr/bin/node ];then
+            ln -s /usr/local/node/bin/node /usr/bin/node
+        fi
+        if [ ! -s /usr/bin/npm ];then
+            ln -s /usr/local/node/bin/npm /usr/bin/npm
+        fi
+        if grep 'export NODE_PATH=/usr/local/node/lib/node_modules' /etc/profile ;then
+            return
+        else
+            echo 'export NODE_PATH=/usr/local/node/lib/node_modules' >>/etc/profile
+            source /etc/profile
+        fi
     fi
-}
-
-ssmgr_start(){
-    echo
-    echo -e "[${green}Info!${plain}] Starting ssmgr..."
-    if netstat -lnpt|grep ':80 ' |grep -v 'grep' >/dev/null
-    then
-        echo
-        echo -e "[${red}Error!${plain}] The port 80 is already used by other programs,please modify it manually."
-        break
-    fi
-    ss-manager -m ${ss_libev_encry} --manager-address 127.0.0.1:${ss_libev_port}
-    screen -dmS ss ssmgr -c ss.yml
-    screen -dmS webgui ssmgr -c webgui.yml
 }
 
 install_shadowsocks_libev(){
@@ -536,28 +557,56 @@ install_shadowsocks_manager(){
     if [ $? -eq 0 ];then
         echo
         echo -e "[${green}Info!${plain}] The shdowsocks-manager install success!"
+        if [ ! -s /usr/bin/ssmgr ];then
+            ln -s /usr/local/node/lib/node_modules/shadowsocks-manager/bin/ssmgr /usr/bin/ssmgr
+        fi
     else
         echo
         echo -e "[${red}Error!${plain}] The shdowsocks-manager install failed!"
         exit 1
     fi
-    
 }
 
-install_all_programs(){
+#ssmgr_start(){
+#    echo
+#    echo -e "[${green}Info!${plain}] Starting ssmgr..."
+#    if [ ! -s /usr/lib64/libsodium.so.13 ];then
+#        ln -s /usr/lib/libsodium.so /usr/lib64/libsodium.so.13 
+#    fi
+#    if [ ! -s /usr/lib64/libsodium.so.23 ];then
+#        ln -s /usr/lib/libsodium.so /usr/lib64/libsodium.so.23
+#    fi
+#    if [ ! -s /usr/lib64/libmbedcrypto.so.0 ];then
+#        ln -s /usr/lib/libmbedcrypto.so.0 /usr/lib64/libmbedcrypto.so.0
+#    fi
+#    screen -dmS ss-libev ss-manager -m ${ss_libev_encry} --manager-address 127.0.0.1:${ss_libev_port}
+#    sleep 1
+#    screen -dmS ss ssmgr -c ss.yml
+#
+#   if [ "${program}" == "all" ] || [ "${program}" == "server" ];then
+#        if netstat -lnpt|grep ':80 ' |grep -v 'grep' >/dev/null
+#        then
+#            echo
+#            echo -e "[${red}Error!${plain}] The port 80 is already used by other programs,please modify it manually."
+#            break
+#        fi
+#        screen -dmS webgui ssmgr -c webgui.yml
+#    fi
+#}
+
+install(){
     print_info
     disable_selinux
     check_conf
-    add_conf
-    add_firewalld
     install_deppak
     download_files
     install_nodejs
     install_shadowsocks_libev
     install_shadowsocks_manager
+    set_firewalld
     ssmgr_start
     print_info
-    conf_info
+    print_conf
     echo -e "[${green}Info!${plain}] Thanks for your using this script."
     echo -e "[${green}Info!${plain}] Please visit ${ipaddr}"
     sleep 3
@@ -595,7 +644,8 @@ uninstall_shadowsocks_manager(){
         firewall-cmd --reload
     fi
 }
-uninstall_all_programs(){
+
+uninstall(){
     print_info
     blank_line
     read -p "Are you sure uninstall_all_programs?(y/n):" answer
@@ -611,13 +661,19 @@ uninstall_all_programs(){
 }
 
 action=${1}
-[ -z ${1} ] && action=install
+program=${2}
+[ -z ${2} ] && program=all
+
 case ${action} in
     install|uninstall)
-        ${action}_all_programs
+        case ${program} in 
+            all|server|node)
+                ${action} ;;
+            *)
+                print_error ;;
+        esac
         ;;
     *)
-        echo -e "[${red}Error!${plain}] Please enter: ${0} install or uninstall."
+        print_error
         ;;
 esac
-
