@@ -1,7 +1,7 @@
 #! /bin/bash
 # This is shadowsocks-manager install script.
-# Update data: 2018-07-15
-# Version: 1.1.2
+# Update data: 2018-09-17
+# Version: 1.2.0
 
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
@@ -77,9 +77,9 @@ rc4-md5
 ipaddr=`ip addr |egrep -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' |egrep -v '^127' |head -n 1`
 
 # color
-red='\033[0;31m'
-green='\033[0;32m'
-yellow='\033[0;33m'
+red='\033[0;31;05m'
+green='\033[0;32;05m'
+yellow='\033[0;33;05m'
 plain='\033[0m'
 
 
@@ -216,7 +216,7 @@ get_conf(){
     done
 
     # set admin email
-    if [ "${program}" == "all" ] || [ "${program}" == "server" ];then
+    if [ "${ss_run}" == "webgui" ];then
         while :; do
             echo
             echo "Please enter email address for admin:"
@@ -244,14 +244,14 @@ print_conf(){
     echo
     echo "+---------------------------------------------------------------+"
     echo
-    echo -e "        Your ss-libev port:        ${red}${ss_libev_port}${plain}"
-    echo -e "        Your ss-mgr port           ${red}${ssmgr_port}${plain}"
-    echo -e "        Your ss-mgr passwd         ${red}${ssmgr_passwd}${plain}"
-    echo -e "        Your user port ranges:     ${red}${port_ranges}${plain}"
-    echo -e "        Your ss-libev-encry:       ${red}${ss_libev_encry}${plain}"
-    if [ "${program}" == "all" ] || [ "${program}" == "server" ];then
-        echo -e "        Your E-amil address:       ${red}${email_admin}${plain}"
-        echo -e "        Your E-amil server:        ${red}${email_smtp}${plain}"
+    echo -e "        Your ss-libev port:        ${ss_libev_port}"
+    echo -e "        Your ss-mgr port           ${ssmgr_port}"
+    echo -e "        Your ss-mgr passwd         ${ssmgr_passwd}"
+    echo -e "        Your user port ranges:     ${port_ranges}"
+    echo -e "        Your ss-libev-encry:       ${ss_libev_encry}"
+    if [ "${ss_run}" == "webgui" ];then
+        echo -e "        Your E-amil address:       ${email_admin}"
+        echo -e "        Your E-amil server:        ${email_smtp}"
     fi
     echo
     echo "+---------------------------------------------------------------+"
@@ -271,7 +271,7 @@ manager:
 db: 'ss.sqlite'
 EOF
 
-    if [ "${program}" == "all" ] || [ "${program}" == "server" ];then
+    if [ "${ss_run}" == "webgui" ];then
         cat > /root/.ssmgr/webgui.yml<<EOF
 type: m
 empty: false
@@ -411,7 +411,7 @@ download() {
     local cur_dir=`pwd`
     if [ -s ${filename} ]; then
         echo
-        echo -e "[${green}Info!${plain}] ${filename} [found]"
+        echo -e "[${green}Info!${plain}] ${filename} found!"
     else
         echo
         echo -e "[${yellow}Warning!${plain}] ${filename} not found, download now..."
@@ -440,7 +440,7 @@ set_firewalld(){
     local firewall_file=/etc/firewalld/zones/public.xml
     if systemctl status firewalld |grep -q 'active (running)'; then
         firewall-cmd --zone=public --add-service=ssmgr --permanent
-        if [ "${program}" == "all" ] || [ "${program}" == "server" ];then
+        if [ "${ss_run}" == "webgui" ];then
             if ! grep -q '"http"' ${firewall_file} ;then
                 firewall-cmd --zone=public --add-service=http --permanent
             fi
@@ -501,19 +501,16 @@ install_nodejs(){
     echo
     echo -e "[${green}Info!${plain}] Installing ${nodejs_file}"
     sleep 3
-    if rpm -qa |grep -q nodejs ;then
-        echo
-        echo -e "[${yellow}Warning!${plain}] The nodejs already exists."
-    else
-        cd ${cur_dir}
-        tar zxf ${nodejs_file}.tar.gz
-        mv ${nodejs_file} /usr/local/node
-        if [ ! -s /usr/bin/node ];then
-            ln -s /usr/local/node/bin/node /usr/bin/node
+
+    if [ -d /usr/local/node ];then
+        if [ $(node -v |cut -b2) -ne "8" ];then
+            mv /usr/local/node /usr/local/node.bak
+            cd ${cur_dir}
+            tar zxf ${nodejs_file}.tar.gz
+            mv ${nodejs_file} /usr/local/node
         fi
-        if [ ! -s /usr/bin/npm ];then
-            ln -s /usr/local/node/bin/npm /usr/bin/npm
-        fi
+        [ ! -s /usr/bin/node ] && ln -s /usr/local/node/bin/node /usr/bin/node
+        [ ! -s /usr/bin/npm ] && ln -s /usr/local/node/bin/npm /usr/bin/npm
         if grep 'export NODE_PATH=/usr/local/node/lib/node_modules' /etc/profile ;then
             return
         else
@@ -553,13 +550,11 @@ install_shadowsocks_manager(){
     echo
     echo -e "[${green}Info!${plain}] Installing shadowsocks-manager..."
     sleep 3
-    npm i -g shadowsocks-manager
+    npm i -g shadowsocks-manager --unsafe-perm
     if [ $? -eq 0 ];then
         echo
         echo -e "[${green}Info!${plain}] The shdowsocks-manager install success!"
-        if [ ! -s /usr/bin/ssmgr ];then
-            ln -s /usr/local/node/lib/node_modules/shadowsocks-manager/bin/ssmgr /usr/bin/ssmgr
-        fi
+        [ ! -s /usr/bin/ssmgr ] && ln -s /usr/local/node/lib/node_modules/shadowsocks-manager/bin/ssmgr /usr/bin/ssmgr
     else
         echo
         echo -e "[${red}Error!${plain}] The shdowsocks-manager install failed!"
@@ -567,43 +562,56 @@ install_shadowsocks_manager(){
     fi
 }
 
-#ssmgr_start(){
-#    echo
-#    echo -e "[${green}Info!${plain}] Starting ssmgr..."
-#    if [ ! -s /usr/lib64/libsodium.so.13 ];then
-#        ln -s /usr/lib/libsodium.so /usr/lib64/libsodium.so.13 
-#    fi
-#    if [ ! -s /usr/lib64/libsodium.so.23 ];then
-#        ln -s /usr/lib/libsodium.so /usr/lib64/libsodium.so.23
-#    fi
-#    if [ ! -s /usr/lib64/libmbedcrypto.so.0 ];then
-#        ln -s /usr/lib/libmbedcrypto.so.0 /usr/lib64/libmbedcrypto.so.0
-#    fi
-#    screen -dmS ss-libev ss-manager -m ${ss_libev_encry} --manager-address 127.0.0.1:${ss_libev_port}
-#    sleep 1
-#    screen -dmS ss ssmgr -c ss.yml
-#
-#   if [ "${program}" == "all" ] || [ "${program}" == "server" ];then
-#        if netstat -lnpt|grep ':80 ' |grep -v 'grep' >/dev/null
-#        then
-#            echo
-#            echo -e "[${red}Error!${plain}] The port 80 is already used by other programs,please modify it manually."
-#            break
-#        fi
-#        screen -dmS webgui ssmgr -c webgui.yml
-#    fi
-#}
+ssmgr_start(){
+    echo
+    echo -e "[${green}Info!${plain}] Starting ssmgr..."
+    [ ! -s /usr/lib64/libsodium.so.13 ] && ln -s /usr/lib/libsodium.so /usr/lib64/libsodium.so.13
+    [ ! -s /usr/lib64/libsodium.so.23 ] && ln -s /usr/lib/libsodium.so /usr/lib64/libsodium.so.23
+    [ ! -s /usr/lib64/libmbedcrypto.so.0 ] && ln -s /usr/lib/libmbedcrypto.so.0 /usr/lib64/libmbedcrypto.so.0
+    echo
+    echo "Are you run webgui or only ss?"
+    echo "The M server and S nodes are in the webgui option."
+    read -p "(Default:webgui):" ss_run
+    [ -z ${ss_run} ] && ss_run=webgui
+    ss_run=$(echo ${ss_run} |tr [A-Z] [a-z])
+    check_conf
+    screen -dmS ss-libev ss-manager -m ${ss_libev_encry} --manager-address 127.0.0.1:${ss_libev_port}
+    sleep 1
+    while :;
+    do
+        if [ "${ss_run}" == "webgui" ] ;then
+            screen -dmS ss ssmgr -c ss.yml
+            sleep 1
+            screen -dmS webgui ssmgr -c webgui.yml
+            break
+        elif [ "${ss_run}" == "ss" ] ;then
+            screen -dmS ss ssmgr -c ss.yml
+            break
+        else
+            echo
+            echo -e "[${red}Error!${plain}] Please enter webgui or ss!"
+        fi
+    done
+    set_firewalld
+}
+
+stop_ssmgr(){
+    while :
+    do
+        pid_num=$(screen -ls |egrep "\(*\)" |awk -F '.' '{print $1}' |head -n1)
+        kill $pid_num
+        [ $? -ne 0 ] && break
+    done
+}
 
 install(){
     print_info
     disable_selinux
-    check_conf
     install_deppak
     download_files
     install_nodejs
     install_shadowsocks_libev
     install_shadowsocks_manager
-    set_firewalld
     ssmgr_start
     print_info
     print_conf
@@ -635,7 +643,7 @@ uninstall_shadowsocks_libev(){
 uninstall_shadowsocks_manager(){
     npm uninstall -g shadowsocks-manager
     blank_line
-    read -p "Do you keep the configuration file?(y/n)" keep_path
+    read -p "Do you need to keep the configuration file?(y/n)" keep_path
     if [ "${keep_path}" == "n" ] || [ "${keep_path}" == "N" ];then
         rm -rf /usr/lib/node_modules/shadowsocks-manager
         rm -rf /root/.ssmgr
@@ -648,9 +656,10 @@ uninstall_shadowsocks_manager(){
 uninstall(){
     print_info
     blank_line
-    read -p "Are you sure uninstall_all_programs?(y/n):" answer
+    read -p "Are you sure uninstall?(y/n)" answer
     [ -z ${answer} ] && answer="n"
     if [ "${answer}" == "y" ] || [ "${answer}" == "Y" ]; then
+        stop_ssmgr
         uninstall_shadowsocks_libev
         uninstall_shadowsocks_manager
     fi
@@ -661,17 +670,11 @@ uninstall(){
 }
 
 action=${1}
-program=${2}
-[ -z ${2} ] && program=all
+[ -z ${1} ] && action=install
 
 case ${action} in
     install|uninstall)
-        case ${program} in 
-            all|server|node)
-                ${action} ;;
-            *)
-                print_error ;;
-        esac
+        ${action}
         ;;
     *)
         print_error
