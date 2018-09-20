@@ -1,10 +1,11 @@
 #! /bin/bash
 # This is shadowsocks-manager install script.
-# Update data: 2018-09-17
-# Version: 1.2.0
+# Update data: 2018-09-20
+# Version: 1.2.1
 
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
+
 
 if [ $(id -u) != "0" ];then
     echo "[${red}Error!${plain}] This script must be run as root!"
@@ -340,7 +341,7 @@ plugins:
             flow: '0.5g'
             banTime: '10m'
     alipay:
-        use: fslse
+        use: false
         appid: 
         notifyUrl: ''
         merchantPrivateKey: ''
@@ -376,6 +377,22 @@ EOF
 check_conf(){
     # check configuration information
     blank_line
+    while :
+    do
+        echo
+        echo "Are you run webgui or only ss?(webgui|ss)"
+        echo "The M server and S nodes are in the webgui option."
+        read -p "(Default:webgui):" ss_run
+        [ -z ${ss_run} ] && ss_run=webgui
+        ss_run=$(echo ${ss_run} |tr [A-Z] [a-z])
+        if [ ${ss_run} == "webgui" ] || [ ${ss_run} == "ss" ];then
+            break
+        else
+            echo
+            echo -e "[${red}Error!${plain}] Please enter webgui or ss!"
+        fi
+    done
+
     if [ ! -d /root/.ssmgr ];then
         mkdir /root/.ssmgr/
         read -p "Do you need to configure some parameters here?(y/n)" config
@@ -389,7 +406,7 @@ check_conf(){
         while :; do
             get_conf
             clear
-        echo
+            echo
             echo -e "[${green}Info${plain}] Please verify the configure you have entered."
             print_conf
             read -p "Are you sure to use them?(y/n):" verify
@@ -568,13 +585,7 @@ ssmgr_start(){
     [ ! -s /usr/lib64/libsodium.so.13 ] && ln -s /usr/lib/libsodium.so /usr/lib64/libsodium.so.13
     [ ! -s /usr/lib64/libsodium.so.23 ] && ln -s /usr/lib/libsodium.so /usr/lib64/libsodium.so.23
     [ ! -s /usr/lib64/libmbedcrypto.so.0 ] && ln -s /usr/lib/libmbedcrypto.so.0 /usr/lib64/libmbedcrypto.so.0
-    echo
-    echo "Are you run webgui or only ss?"
-    echo "The M server and S nodes are in the webgui option."
-    read -p "(Default:webgui):" ss_run
-    [ -z ${ss_run} ] && ss_run=webgui
-    ss_run=$(echo ${ss_run} |tr [A-Z] [a-z])
-    check_conf
+
     screen -dmS ss-libev ss-manager -m ${ss_libev_encry} --manager-address 127.0.0.1:${ss_libev_port}
     sleep 1
     while :;
@@ -583,14 +594,10 @@ ssmgr_start(){
             screen -dmS ss ssmgr -c ss.yml
             sleep 1
             screen -dmS webgui ssmgr -c webgui.yml
-            break
         elif [ "${ss_run}" == "ss" ] ;then
             screen -dmS ss ssmgr -c ss.yml
-            break
-        else
-            echo
-            echo -e "[${red}Error!${plain}] Please enter webgui or ss!"
         fi
+        
     done
     set_firewalld
 }
@@ -606,13 +613,14 @@ stop_ssmgr(){
 
 install(){
     print_info
+    check_conf
     disable_selinux
     install_deppak
     download_files
     install_nodejs
     install_shadowsocks_libev
     install_shadowsocks_manager
-    ssmgr_start
+	ssmgr_start 
     print_info
     print_conf
     echo -e "[${green}Info!${plain}] Thanks for your using this script."
