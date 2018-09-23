@@ -534,6 +534,10 @@ install_nodejs(){
             echo 'export NODE_PATH=/usr/local/node/lib/node_modules' >>/etc/profile
             source /etc/profile
         fi
+    else
+        cd ${cur_dir}
+        tar zxf ${nodejs_file}.tar.gz
+        mv ${nodejs_file} /usr/local/node
     fi
 }
 
