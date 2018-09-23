@@ -1,7 +1,7 @@
 #! /bin/bash
 # This is shadowsocks-manager install script.
 # Update data: 2018-09-20
-# Version: 1.2.1
+# Version: 1.2.3
 
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
@@ -522,10 +522,11 @@ install_nodejs(){
     if [ -d /usr/local/node ];then
         if [ $(node -v |cut -b2) -ne "8" ];then
             mv /usr/local/node /usr/local/node.bak
-            cd ${cur_dir}
-            tar zxf ${nodejs_file}.tar.gz
-            mv ${nodejs_file} /usr/local/node
         fi
+    else
+        cd ${cur_dir}
+        tar zxf ${nodejs_file}.tar.gz
+        mv ${nodejs_file} /usr/local/node
         [ ! -s /usr/bin/node ] && ln -s /usr/local/node/bin/node /usr/bin/node
         [ ! -s /usr/bin/npm ] && ln -s /usr/local/node/bin/npm /usr/bin/npm
         if grep 'export NODE_PATH=/usr/local/node/lib/node_modules' /etc/profile ;then
@@ -534,10 +535,6 @@ install_nodejs(){
             echo 'export NODE_PATH=/usr/local/node/lib/node_modules' >>/etc/profile
             source /etc/profile
         fi
-    else
-        cd ${cur_dir}
-        tar zxf ${nodejs_file}.tar.gz
-        mv ${nodejs_file} /usr/local/node
     fi
 }
 
