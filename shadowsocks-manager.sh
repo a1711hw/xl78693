@@ -267,7 +267,7 @@ shadowsocks:
     address: 127.0.0.1:${ss_libev_port}
 manager:
     address: 0.0.0.0:${ssmgr_port}
-    password: '${ssmgr-passwd}'
+    password: '${ssmgr_passwd}'
 db: 'ss.sqlite'
 EOF
 
@@ -277,7 +277,7 @@ type: m
 empty: false
 manager:
     address: ${ipaddr}:${ssmgr_port}
-    password: '${ssmgr-passwd}'
+    password: '${ssmgr_passwd}'
 plugins:
     flowSaver:
         use: true
@@ -340,7 +340,7 @@ plugins:
             flow: '0.5g'
             banTime: '10m'
     alipay:
-        use: fslse
+        use: false
         appid: 
         notifyUrl: ''
         merchantPrivateKey: ''
@@ -401,7 +401,7 @@ check_conf(){
             fi
         done
     else
-        ss_libev_port=$(grep "add" .ssmgr/ss.yml |awk -F ':' '{print $NF}' |head -n1)
+        ss_libev_port=$(grep "add" /root/.ssmgr/ss.yml |awk -F ':' '{print $NF}' |head -n1)
         ss_libev_encry="aes-256-gcm"
     fi
 }
@@ -506,19 +506,19 @@ install_nodejs(){
         if [ $(node -v |cut -b2) -ne "8" ];then
             mv /usr/local/node /usr/local/node.bak
         fi
-    else
-        cd ${cur_dir}
-        tar zxf ${nodejs_file}.tar.gz
-        mv ${nodejs_file} /usr/local/node
-        [ ! -s /usr/bin/node ] && ln -s /usr/local/node/bin/node /usr/bin/node
-        [ ! -s /usr/bin/npm ] && ln -s /usr/local/node/bin/npm /usr/bin/npm
-        if grep 'export NODE_PATH=/usr/local/node/lib/node_modules' /etc/profile ;then
-            return
-        else
-            echo 'export NODE_PATH=/usr/local/node/lib/node_modules' >>/etc/profile
-            source /etc/profile
-        fi
     fi
+    cd ${cur_dir}
+    tar zxf ${nodejs_file}.tar.gz
+    mv ${nodejs_file} /usr/local/node
+    [ ! -s /usr/bin/node ] && ln -s /usr/local/node/bin/node /usr/bin/node
+    [ ! -s /usr/bin/npm ] && ln -s /usr/local/node/bin/npm /usr/bin/npm
+    if grep 'export NODE_PATH=/usr/local/node/lib/node_modules' /etc/profile ;then
+        return
+    else
+        echo 'export NODE_PATH=/usr/local/node/lib/node_modules' >>/etc/profile
+        source /etc/profile
+    fi
+    npm i -g npm
 }
 
 install_shadowsocks_libev(){
