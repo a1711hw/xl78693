@@ -1,7 +1,7 @@
 #! /bin/bash
 # This is shadowsocks-manager install script.
-# Update data: 2018-09-23
-# Version: 1.2.4
+# Update data: 2019-01-05
+# Version: 1.3.0
 
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
@@ -52,8 +52,9 @@ libsodium_url="https://github.com/jedisct1/libsodium/releases/download/1.0.16/li
 mbedtls_file="mbedtls-2.6.0"
 mbedtls_url="https://tls.mbed.org/download/mbedtls-2.6.0-gpl.tgz"
 
-nodejs_file="node-v8.11.3-linux-x64"
-nodejs_url="https://nodejs.org/dist/v8.11.3/node-v8.11.3-linux-x64.tar.gz"
+nodejs_file="node-v10.15.1-linux-x64"
+nodejs_url="https://nodejs.org/dist/v10.15.1/node-v10.15.1-linux-x64.tar.gz"
+
 
 encryptions=(
 aes-256-gcm
@@ -433,7 +434,7 @@ download_files(){
     download "${shadowsocks_libev_ver}.tar.gz" "${download_link}"
     download "${libsodium_file}.tar.gz" "${libsodium_url}"
     download "${mbedtls_file}-gpl.tgz" "${mbedtls_url}"
-    download "node-v8.11.3-linux-x64.tar.gz" "${nodejs_url}"
+    download "node-v10.15.1-linux-x64.tar.gz" "${nodejs_url}"
 }
 
 set_firewalld(){
@@ -551,7 +552,7 @@ install_shadowsocks_manager(){
     echo
     echo -e "[${green}Info!${plain}] Installing shadowsocks-manager..."
     sleep 3
-    npm i -g shadowsocks-manager --unsafe-perm
+    npm i -g shadowsocks-manager@0.29.15 --unsafe-perm
     if [ $? -eq 0 ];then
         echo
         echo -e "[${green}Info!${plain}] The shdowsocks-manager install success!"
@@ -681,4 +682,5 @@ case ${action} in
         print_error
         ;;
 esac
+
 
