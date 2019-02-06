@@ -1,7 +1,7 @@
 #! /bin/bash
 # This is shadowsocks-manager install script.
-# Update data: 2019-01-05
-# Version: 1.3.0
+# Update data: 2019-01-06
+# Version: 1.3.1
 
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
@@ -31,17 +31,6 @@ print_info(){
 |                                                                           |
 +---------------------------------------------------------------------------+
 EOF
-}
-
-print_error(){
-    echo 
-    echo
-    echo -e "[${red}Error!${plain}] Please enter: "
-    echo
-    echo -e "    ${red}${0} install all${plain}"
-    echo -e "    ${red}${0} install server${plain}"
-    echo -e "    ${red}${0} install node${plain}"
-    echo
 }
 
 cur_dir=`pwd`
@@ -115,6 +104,8 @@ install_deppak(){
     sleep 1
     for dep in epel-release tar unzip openssl openssl-devel gettext gcc autoconf libtool automake make asciidoc xmlto libev-devel pcre pcre-devel git c-ares-devel screen net-tools
     do
+        echo
+        echo "Installing ${dep}"
         if ! rpm -qa |grep -q "^${dep}"
         then
             yum install -y ${dep}
@@ -126,6 +117,7 @@ install_deppak(){
         else
             echo
             echo -e "[${yellow}Warning!${plain}] ${dep} already installed."
+            echo
         fi
     done
 }
@@ -165,7 +157,7 @@ get_conf(){
 
     # set passwd for shadowsocks-manager
     echo
-    read -p "Please enter passwd for shadowsocks-manager:" ssmgr_passwd
+    read -p "Please enter password for shadowsocks-manager:" ssmgr_passwd
 
     # set user port range
     while :; do
@@ -243,11 +235,11 @@ get_conf(){
 
 print_conf(){
     echo
-    echo "+---------------------------------------------------------------+"
+    echo "+---------------------------------------------------------------------------+"
     echo
     echo -e "        Your ss-libev port:        ${ss_libev_port}"
     echo -e "        Your ss-mgr port           ${ssmgr_port}"
-    echo -e "        Your ss-mgr passwd         ${ssmgr_passwd}"
+    echo -e "        Your ss-mgr password         ${ssmgr_passwd}"
     echo -e "        Your user port ranges:     ${port_ranges}"
     echo -e "        Your ss-libev-encry:       ${ss_libev_encry}"
     if [ "${ss_run}" == "webgui" ];then
@@ -255,7 +247,7 @@ print_conf(){
         echo -e "        Your E-amil server:        ${email_smtp}"
     fi
     echo
-    echo "+---------------------------------------------------------------+"
+    echo "+---------------------------------------------------------------------------+"
     blank_line
 }
 
@@ -439,22 +431,28 @@ download_files(){
 
 set_firewalld(){
     local firewall_file=/etc/firewalld/zones/public.xml
-    if systemctl status firewalld |grep -q 'active (running)'; then
-        firewall-cmd --zone=public --add-service=ssmgr --permanent
-        if [ "${ss_run}" == "webgui" ];then
-            if ! grep -q '"http"' ${firewall_file} ;then
-                firewall-cmd --zone=public --add-service=http --permanent
+    while :
+    do
+        if systemctl status firewalld |grep -q 'active (running)'; then
+            firewall-cmd --zone=public --add-service=ssmgr --permanent
+            if [ "${ss_run}" == "webgui" ];then
+                if ! grep -q '"http"' ${firewall_file} ;then
+                    firewall-cmd --zone=public --add-service=http --permanent
+                fi
+                firewall-cmd --reload
             fi
-            firewall-cmd --reload
+            if ! grep -q '"ssmgr"' ${firewall_file}; then
+                sed -i '/dhcpv6-client/a\  <service name="ssmgr"/>' ${firewall_file}
+                firewall-cmd --reload
+                break
+            fi
+        else
+            echo
+            echo -e "[${yellow}Warning!${plain}] The firewalld not running."
+            echo -e "[${green}Info!${plain}] Start up firewalld..."
+            sleep 3
         fi
-        if ! grep -q '"ssmgr"' ${firewall_file}; then
-            sed -i '/dhcpv6-client/a\  <service name="ssmgr"/>' ${firewall_file}
-            firewall-cmd --reload
-        fi
-    else
-        echo
-        echo -e "[${yellow}Warning!${plain}] The firewalld not running."
-    fi
+    done
 }
 
 install_libsodium(){
@@ -618,7 +616,9 @@ install(){
     print_info
     print_conf
     echo -e "[${green}Info!${plain}] Thanks for your using this script."
-    echo -e "[${green}Info!${plain}] Please visit ${ipaddr}"
+	if [ "${ss_run}" == "webgui" ];then
+		echo -e "[${green}Info!${plain}] Please visit ${ipaddr}"
+	fi
     sleep 3
 }
 
@@ -673,14 +673,11 @@ uninstall(){
 
 action=${1}
 [ -z ${1} ] && action=install
-
 case ${action} in
     install|uninstall)
         ${action}
         ;;
     *)
-        print_error
+        echo "Usage: $0 {install|uninstall}"
         ;;
 esac
-
-
