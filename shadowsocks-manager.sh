@@ -1,7 +1,8 @@
 #! /bin/bash
 # This is shadowsocks-manager install script.
-# Update data: 2019-01-06
-# Version: 1.3.1
+# Update data: 2019-07-21
+# add redis
+# Version: 1.4.1
 
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
@@ -16,6 +17,7 @@ fi
 
 blank_line(){
     cat<<EOF
+
 EOF
 }
 
@@ -72,6 +74,8 @@ green='\033[0;32;05m'
 yellow='\033[0;33;05m'
 plain='\033[0m'
 
+timeout=10
+
 
 disable_selinux(){
     if [ -s /etc/selinux/config ] && grep 'SELINUX=enforcing' /etc/selinux/config; then
@@ -84,7 +88,12 @@ get_ss_version(){
     ver=$(wget --no-check-certificate -qO- https://api.github.com/repos/shadowsocks/shadowsocks-libev/releases/latest | grep 'tag_name' | cut -d\" -f4)
     [ -z ${ver} ] && echo -e "[${red}Error!${plain}] Get shadowsocks-libev latest version failed" && exit 1
     shadowsocks_libev_ver="shadowsocks-libev-$(echo ${ver} | sed -e 's/^[a-zA-Z]//g')"
-    download_link="https://github.com/shadowsocks/shadowsocks-libev/releases/download/${ver}/${shadowsocks_libev_ver}.tar.gz"
+    ss_url="https://github.com/shadowsocks/shadowsocks-libev/releases/download/${ver}/${shadowsocks_libev_ver}.tar.gz"
+}
+
+get_redis_version(){
+    redis_ver=$(wget --no-check-certificate -qO- http://download.redis.io/releases/ |awk -F '"' '{print $8}'|grep '[0-9]' |tail -n 1|awk -F '.tar' '{print $1}')
+    redis_url="http://download.redis.io/releases/${redis_ver}.tar.gz"
 }
 
 check_email() {
@@ -102,7 +111,7 @@ install_deppak(){
     echo "The relevant base package is being installed." 
     echo
     sleep 1
-    for dep in epel-release tar unzip openssl openssl-devel gettext gcc autoconf libtool automake make asciidoc xmlto libev-devel pcre pcre-devel git c-ares-devel screen net-tools
+    for dep in epel-release psmisc tar unzip openssl openssl-devel gettext gcc autoconf libtool automake make asciidoc xmlto libev-devel pcre pcre-devel git c-ares-devel screen net-tools
     do
         echo
         echo "Installing ${dep}"
@@ -122,14 +131,20 @@ install_deppak(){
     done
 }
 
+
+get_passwd(){
+    local password=$(cat /dev/urandom | head -1 | md5sum | head -c 12)
+    echo ${password}
+}
+
 get_conf(){
     # set port for shadowsocks-libev
     sleep 1
     while :
     do
         echo
-        echo "Please enter port for shadowsocks-libev:"
-        read -p "(Default prot: 4000):" ss_libev_port
+        echo "Please enter port for shadowsocks-libev!"
+        read -t ${timeout} -p "(Default prot: 4000):" ss_libev_port
         [ -z "${ss_libev_port}" ] && ss_libev_port="4000"
         if ! echo ${ss_libev_port} |grep -q '^[0-9]\+$'; then
             echo
@@ -141,9 +156,9 @@ get_conf(){
     # set port for shadowsocks-manager
     while :;do
         echo
-        echo "Please enter port for shadowsocks-manager:"
-        read -p "(Default prot: 4001):" ssmgr_port
-        [ -z "${ssmgr_port}" ] && ssmgr_port="4001"
+        echo "Please enter port for shadowsocks-manager!"
+        read -t ${timeout} -p "(Default prot: 5001):" ssmgr_port
+        [ -z "${ssmgr_port}" ] && ssmgr_port="5001"
         if ! echo ${ssmgr_port} |grep -q '^[0-9]\+$'; then
             echo
             echo -e "[${red}Error!${plain}] You are not enter numbers.,please try again."
@@ -157,22 +172,22 @@ get_conf(){
 
     # set passwd for shadowsocks-manager
     echo
-    read -p "Please enter password for shadowsocks-manager:" ssmgr_passwd
+    ssmgr_passwd=$(get_passwd)
 
     # set user port range
     while :; do
         echo
-        echo "Please enter the port ranges use for user:"
-        read -p "(Default prot: 50000-60000):" port_ranges
-        [ -z "${port_ranges}" ] && port_ranges=50000-60000
+        echo "Please enter the port ranges use for user!"
+        read -t ${timeout} -p "(Default prot: 40000-50000):" port_ranges
+        [ -z "${port_ranges}" ] && port_ranges="40000-50000"
         if ! echo ${port_ranges} |grep -q '^[0-9]\+\-[0-9]\+$'; then
             echo
             echo -e "[${red}Error!${plain}] You are not enter numbers.,please try again."
             continue
         fi
-        start_port=`echo $port_ranges |awk -F '-' '{print $1}'`
-        end_port=`echo $port_ranges |awk -F '-' '{print $2}'`
-        if [ ${start_port} -ge 1 ] && [ ${end_port} -le 65535 ] ; then
+        local start_port=`echo $port_ranges |awk -F '-' '{print $1}'`
+        local end_port=`echo $port_ranges |awk -F '-' '{print $2}'`
+        if [ ${start_port} -ge 1 ] && [ ${end_port} -le 65535 ] && [ ${start_port} -le ${end_port} ]; then
             break
         else
             echo
@@ -189,8 +204,8 @@ get_conf(){
             hint="${encryptions[$i-1]}"
             echo -e "${hint}"
         done
-        read -p "Which encryptions you'd select(Default: ${encryptions[0]}):" pick
-        [ -z "$pick" ] && pick=1
+        read -t ${timeout} -p "Which encryptions you'd select(Default: ${encryptions[6]}):" pick
+        [ -z "$pick" ] && pick=7
         expr ${pick} + 1 &>/dev/null
         if [ $? -ne 0 ]; then
             echo
@@ -230,6 +245,7 @@ get_conf(){
         echo
         echo "Please enter your Mail Server address:" 
         read -p "(For example: smtp.qq.com or other):" email_smtp
+        admin_password=$(get_passwd)
     fi
 }
 
@@ -239,7 +255,7 @@ print_conf(){
     echo
     echo -e "        Your ss-libev port:        ${ss_libev_port}"
     echo -e "        Your ss-mgr port           ${ssmgr_port}"
-    echo -e "        Your ss-mgr password         ${ssmgr_passwd}"
+    echo -e "        Your ss-mgr password       ${ssmgr_passwd}"
     echo -e "        Your user port ranges:     ${port_ranges}"
     echo -e "        Your ss-libev-encry:       ${ss_libev_encry}"
     if [ "${ss_run}" == "webgui" ];then
@@ -255,7 +271,6 @@ create_file_conf(){
     # shadowsocks-manager configuration
     cat > /root/.ssmgr/ss.yml <<EOF
 type: s
-empty: false
 shadowsocks:
     address: 127.0.0.1:${ss_libev_port}
 manager:
@@ -267,7 +282,6 @@ EOF
     if [ "${ss_run}" == "webgui" ];then
         cat > /root/.ssmgr/webgui.yml<<EOF
 type: m
-empty: false
 manager:
     address: ${ipaddr}:${ssmgr_port}
     password: '${ssmgr_passwd}'
@@ -312,6 +326,8 @@ plugins:
         host: '0.0.0.0'
         port: '80'
         site: 'http://${ipaddr}'
+        admin_username: '${email_admin}'
+        admin_password: '${admin_password}'
         #cdn: 'http://xxx.xxx.com'
         #icon: 'icon.png'
         #skin: 'default'
@@ -345,6 +361,12 @@ plugins:
         client_id: ''
         client_secret: ''
 db: 'webgui.sqlite'
+
+redis:
+    host: '127.0.0.1'
+    port: 6379
+    password: '${redis_passwd}'
+    db: 0
 EOF
     fi
 
@@ -366,6 +388,24 @@ EOF
     fi
 }
 
+conf_redis(){
+    cd ${redis_ver}
+    cp redis.conf /etc/redis.conf
+    sed -i "s/^daemonize no/daemonize yes/g" /etc/redis.conf
+    sed -i 's/^logfile/#logfile/g' /etc/redis.conf
+    sed -i '/^logfile/a\logfile "\/var\/log\/redis.log"' /etc/redis.conf
+    sed -i 's/^dir/#dir/g' /etc/redis.conf
+    sed -i "/^dir/a\dir \/data\/redis_data#g" /etc/redis.conf
+    sed -i "s#^appendonly no#appendonly yes#g" /etc/redis.conf
+    redis_passwd=$(get_passwd)
+    echo "requirepass ${redis_passwd}" >> /etc/redis.conf
+    mkdir -p /data/redis_data
+    sysctl vm.overcommit_memory=1
+    echo never > /sys/kernel/mm/transparent_hugepage/enabled
+    echo "sysctl vm.overcommit_memory=1" >> /etc/rc.local
+    echo "echo never > /sys/kernel/mm/transparent_hugepage/enabled" >> /etc/rc.local
+}
+
 check_conf(){
     # check configuration information
     blank_line
@@ -379,13 +419,15 @@ check_conf(){
         echo
         echo "Now start set up some related configuration."
 
-        while :; do
+        while :;
+        do
             get_conf
             clear
-        echo
+            echo
             echo -e "[${green}Info${plain}] Please verify the configure you have entered."
             print_conf
             read -p "Are you sure to use them?(y/n):" verify
+            [ -z "${verify}" ] && verify="n"
             if [ "${verify}" == "n" ] || [ "${verify}" == "N" ];then
                 continue
             else
@@ -423,10 +465,12 @@ download() {
 download_files(){
     cd ${cur_dir}
     get_ss_version
-    download "${shadowsocks_libev_ver}.tar.gz" "${download_link}"
+    get_redis_version
+    download "${shadowsocks_libev_ver}.tar.gz" "${ss_url}"
     download "${libsodium_file}.tar.gz" "${libsodium_url}"
     download "${mbedtls_file}-gpl.tgz" "${mbedtls_url}"
     download "node-v10.15.1-linux-x64.tar.gz" "${nodejs_url}"
+    download "${redis_ver}.tar.gz" "${redis_url}"
 }
 
 set_firewalld(){
@@ -520,6 +564,27 @@ install_nodejs(){
     npm i -g npm
 }
 
+install_redis(){
+    echo
+    echo -e "[${green}Info!${plain}] Installing redis!"
+    sleep 3
+    
+    cd ${cur_dir}
+    tar zxf ${redis_ver}.tar.gz
+    
+    redis-server -v >/dev/null 2>&1
+    if [ $? -eq 0 ];
+    then
+        echo -e "[${red}Error!${plain}] The redis already installed!"
+        redis_conf=$(find / -name redis.conf |grep -v "/root/${redis_ver}/redis.conf")
+        [ -s ${redis_conf} ] && mv ${redis_conf} ${redis_conf}.bak
+        conf_redis
+    else
+        conf_redis
+        make && make install
+    fi
+}
+
 install_shadowsocks_libev(){
     install_libsodium
     install_mbedtls
@@ -550,7 +615,7 @@ install_shadowsocks_manager(){
     echo
     echo -e "[${green}Info!${plain}] Installing shadowsocks-manager..."
     sleep 3
-    npm i -g shadowsocks-manager@0.29.15 --unsafe-perm
+    npm i -g shadowsocks-manager --unsafe-perm
     if [ $? -eq 0 ];then
         echo
         echo -e "[${green}Info!${plain}] The shdowsocks-manager install success!"
@@ -575,7 +640,9 @@ ssmgr_start(){
     [ -z ${ss_run} ] && ss_run=webgui
     ss_run=$(echo ${ss_run} |tr [A-Z] [a-z])
     check_conf
-    screen -dmS ss-libev ss-manager -m ${ss_libev_encry} --manager-address 127.0.0.1:${ss_libev_port}
+    screen -dmS ss-libev ss-manager -m ${ss_libev_encry} -u --manager-address 127.0.0.1:${ss_libev_port}
+    sleep 1
+    redis-server /etc/redis.conf
     sleep 1
     while :;
     do
@@ -595,15 +662,6 @@ ssmgr_start(){
     set_firewalld
 }
 
-stop_ssmgr(){
-    while :
-    do
-        pid_num=$(screen -ls |egrep "\(*\)" |awk -F '.' '{print $1}' |head -n1)
-        kill $pid_num
-        [ $? -ne 0 ] && break
-    done
-}
-
 install(){
     print_info
     disable_selinux
@@ -611,6 +669,7 @@ install(){
     download_files
     install_nodejs
     install_shadowsocks_libev
+    install_redis
     install_shadowsocks_manager
     ssmgr_start
     print_info
@@ -618,6 +677,8 @@ install(){
     echo -e "[${green}Info!${plain}] Thanks for your using this script."
 	if [ "${ss_run}" == "webgui" ];then
 		echo -e "[${green}Info!${plain}] Please visit ${ipaddr}"
+        echo -e "[${green}Info!${plain}] Your admin user ${email_admin}"
+        echo -e "[${green}Info!${plain}] Your admin passwd ${admin_password}"
 	fi
     sleep 3
 }
@@ -655,13 +716,25 @@ uninstall_shadowsocks_manager(){
     fi
 }
 
+uninstall_redis(){
+    rm -rf /etc/redis.conf
+    rm -rf /usr/local/bin/redis-sentinel
+    rm -rf /usr/local/bin/redis-benchmark
+    rm -rf /usr/local/bin/redis-cli
+    rm -rf /usr/local/bin/redis-server
+    rm -rf /usr/local/bin/redis-check-aof
+    rm -rf /usr/local/bin/redis-check-rdb
+    rm -rf /run/redis_6379.pid
+}
+
 uninstall(){
     print_info
     blank_line
     read -p "Are you sure uninstall?(y/n)" answer
     [ -z ${answer} ] && answer="n"
     if [ "${answer}" == "y" ] || [ "${answer}" == "Y" ]; then
-        stop_ssmgr
+        killall screen
+        killall redis-server
         uninstall_shadowsocks_libev
         uninstall_shadowsocks_manager
     fi
@@ -681,3 +754,4 @@ case ${action} in
         echo "Usage: $0 {install|uninstall}"
         ;;
 esac
+
